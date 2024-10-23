@@ -6,7 +6,7 @@
 #✅ Let user click and drag to select bounding box 
 #✅ - Lighten selected area
 
-# Capture picture from bounded area
+#✅ Capture picture from bounded area
 
 # Capture a picture (24?) frames a second?  (41.66 ms per frame)
 # - Hotkey to stop capturing (Esc?)
@@ -19,12 +19,17 @@
 from PyQt6.QtGui import QKeyEvent, QMouseEvent, QRegion
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 from PyQt6.QtCore import QPointF, QRectF, Qt
+from PIL import ImageGrab
 import sys
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
+        monitor_res = (3840, 2160)
+        self.monitor_x_scale = monitor_res[0]/1920
+        self.monitor_y_scale = monitor_res[1]/1080
+
         self.setWindowTitle("GIF_Cap")
         self.setGeometry(0, 0, 500, 500)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -61,7 +66,13 @@ class MainWindow(QMainWindow):
         
 
     def mouseReleaseEvent(self, e):
+
         self.mouse_up_coords = e.pos()
+        screenshot = ImageGrab.grab(bbox=(self.box_rect.x() * self.monitor_x_scale
+                                        , self.box_rect.y() * self.monitor_y_scale
+                                        , (self.box_rect.x() + self.box_rect.width()) * self.monitor_x_scale
+                                        , (self.box_rect.y() + self.box_rect.height()) * self.monitor_y_scale))
+        screenshot.save('test.png')
         
     
     def mouseMoveEvent(self, e: QMouseEvent | None) -> None:
