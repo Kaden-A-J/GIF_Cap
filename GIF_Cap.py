@@ -18,17 +18,26 @@
 
 from PyQt6.QtGui import QKeyEvent, QMouseEvent, QRegion
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
-from PyQt6.QtCore import QPointF, QRectF, Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal, pyqtSlot
 from PIL import ImageGrab
 import sys
 
+
 class MainWindow(QMainWindow):
+    cap_pic_exit = pyqtSignal()
     def __init__(self):
         super().__init__()
         
         monitor_res = (3840, 2160)
-        self.monitor_x_scale = monitor_res[0]/1920
-        self.monitor_y_scale = monitor_res[1]/1080
+        self.monitor_scale = (monitor_res[0]/1920, monitor_res[1]/1080)
+
+        self.snips = []
+        self.snip_counter = 4
+        
+        self.cap_timer = QTimer()
+        self.cap_timer.setSingleShot(True)
+        self.cap_timer.timeout.connect(self.capture_pictures)
+        self.cap_pic_exit.connect(self.save_pictures)
 
         self.setWindowTitle("GIF_Cap")
         self.setGeometry(0, 0, 500, 500)
@@ -52,6 +61,40 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(container)
 
+    @pyqtSlot()
+    def save_pictures(self):
+        print('save')
+        self.snips[0].save(
+            'test_gif.gif',
+            save_all=True,
+            append_images=self.snips[1:],
+            optimize=False,
+            duration=1000,
+            loop=0
+        )
+        # idx = 0
+        # for snip in self.snips:
+        #     snip.save('snip_' + str(idx) + '.png')
+        #     idx += 1
+
+    def capture_pictures(self):
+        print('cap')
+        custom_bbox = (self.box_rect.x() * self.monitor_scale[0]
+                    , self.box_rect.y() * self.monitor_scale[1]
+                    , (self.box_rect.x() + self.box_rect.width()) * self.monitor_scale[0]
+                    , (self.box_rect.y() + self.box_rect.height()) * self.monitor_scale[1])
+
+        screenshot = ImageGrab.grab(bbox=custom_bbox)
+        self.snips.append(screenshot)
+ 
+        if self.snip_counter <= 0:
+            self.cap_pic_exit.emit()
+            return
+        else:
+            self.snip_counter -= 1
+
+            self.cap_timer.start(500)
+    
 
     def keyPressEvent(self, e: QKeyEvent | None) -> None:
         if (e.key() == Qt.Key.Key_Escape):
@@ -66,13 +109,8 @@ class MainWindow(QMainWindow):
         
 
     def mouseReleaseEvent(self, e):
-
         self.mouse_up_coords = e.pos()
-        screenshot = ImageGrab.grab(bbox=(self.box_rect.x() * self.monitor_x_scale
-                                        , self.box_rect.y() * self.monitor_y_scale
-                                        , (self.box_rect.x() + self.box_rect.width()) * self.monitor_x_scale
-                                        , (self.box_rect.y() + self.box_rect.height()) * self.monitor_y_scale))
-        screenshot.save('test.png')
+        self.capture_pictures()
         
     
     def mouseMoveEvent(self, e: QMouseEvent | None) -> None:
@@ -102,6 +140,10 @@ class MainWindow(QMainWindow):
         mask = QRegion(self.box_rect.toRect(), QRegion.RegionType.Rectangle)
         empty_region = QRegion(self.geometry(), QRegion.RegionType.Rectangle)
         self.setMask(empty_region.subtracted(mask))
+    
+
+
+
 
 
 app = QApplication(sys.argv)
