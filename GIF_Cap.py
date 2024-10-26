@@ -12,22 +12,27 @@
 # - Right click selecting automatically starts the capture on the selected area
 # - Hotkey to stop capturing (Esc?)
 #✅ - Save individual images in folder? (Start with lower FPS like 3)
+#✅ - Automatically adjust FPS to the maximum someones comp can keep up with based on frame timing
 
 #✅ Stitch saved images together into a GIF
 #✅ - Save GIF to folder
 # - Save GIF to clipboard
 
-from PyQt6.QtGui import QKeyEvent, QMouseEvent, QRegion
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
-from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal, pyqtSlot, QObject
-from PIL import ImageGrab
-import numpy as np
-import sys, time
+# BUG
+# - High framerate playback is a little fast?
 
 
 MONITOR_RES = (3840, 2160)
-MS_TO_RUN = 10000
+MS_TO_RUN = 30000
 FPS = 10
+
+
+from PyQt6.QtGui import QKeyEvent, QMouseEvent, QRegion
+from PyQt6.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal, QObject
+from PIL import ImageGrab
+import numpy as np
+import sys, time
 
 
 class Snipper(QObject):
@@ -51,6 +56,9 @@ class Snipper(QObject):
         self.start_ms = 0
         self.snip_counter = 0
         self.lagged_frames = 0
+        self.frame_timings = []
+        self.last_frame_delay = 0
+        self.last_frame_ms = 0
 
         self.cap_timer = QTimer()
         self.cap_timer.setSingleShot(True)
@@ -68,7 +76,7 @@ class Snipper(QObject):
                     , (capture_rect.y() + capture_rect.height()) * self.monitor_scale[1])
 
         self.snip_counter = 0
-        self.start_ms = self.get_ms()
+        self.start_ms = self.last_frame_ms = self.get_ms()
 
         # the time each snip should take place so we can adjust the pause between depending on snip speed
         self.times_to_snip = np.linspace(self.start_ms, self.start_ms + self.ms_to_run, self.total_frames)
@@ -77,19 +85,27 @@ class Snipper(QObject):
 
 
     def capture_pictures(self):
+        if self.snip_counter > 0:
+            self.frame_timings.insert(len(self.frame_timings), self.get_ms() - self.last_frame_ms)
+        self.last_frame_ms = self.get_ms()
+
         screenshot = ImageGrab.grab(bbox=self.custom_bbox)
         self.snips.append(screenshot)
         self.snip_counter += 1
 
+
         # if there's still time left, take another snip, otherwise break out
-        if self.snip_counter < self.total_frames:
-            if self.snip_counter == self.total_frames - 1: # just take a guess on the last one
-                time_to_next_snip = self.fps_ms
+        if self.get_ms() < self.start_ms + self.ms_to_run:
+            if self.snip_counter == self.total_frames - 1: # just take a guess that the last one is close to the one before
+                time_to_next_snip = self.last_frame_delay
 
             else: # how much time until the next snip should be taken
-                time_to_next_snip = max(0, self.times_to_snip[0] - self.get_ms())
-                # pop off the first value so we don't have to keep track of a potentially changing index if we change the fps
-                self.times_to_snip = self.times_to_snip[1:]
+                if len(self.times_to_snip) > 0:
+                    time_to_next_snip = max(0, self.times_to_snip[0] - self.get_ms())
+                    # pop off the first value so we don't have to keep track of a potentially changing index if we change the fps
+                    self.times_to_snip = self.times_to_snip[1:]
+                else:
+                    time_to_next_snip = self.fps_ms
             
             # if we're falling behind drop the fps until we catch up
             if time_to_next_snip == 0:
@@ -100,32 +116,39 @@ class Snipper(QObject):
             else:
                 self.lagged_frames = 0
 
-            print(self.snip_counter, time_to_next_snip)
+            self.last_frame_delay = time_to_next_snip
+            print('capturing frame: ' + str(self.snip_counter), 'frame delay: ' + str(time_to_next_snip))
             self.cap_timer.start(int(time_to_next_snip))
         else:
+            self.frame_timings.insert(len(self.frame_timings), self.get_ms() - self.last_frame_ms)
             self.cap_pic_exit.emit()
 
 
     def recalc_fps(self, target_fps):
         self.fps = target_fps
         self.fps_ms = int(1000/target_fps)
-        self.total_frames = int(self.ms_to_run / 1000 * target_fps)
-        self.times_to_snip = np.linspace(self.get_ms(), self.get_ms() + self.ms_to_run, self.total_frames - self.snip_counter)
+        ms_already_run = (self.get_ms() - self.start_ms)
+        self.total_frames = int(self.snip_counter + ((self.ms_to_run - ms_already_run) / 1000 * target_fps))
+        print(self.total_frames)
+        self.times_to_snip = np.linspace(self.get_ms(), self.start_ms + self.ms_to_run, self.total_frames - self.snip_counter - 1)
         self.times_to_snip = self.times_to_snip[1:] # pop first value so we always look at how long until the next frame is
 
 
     def save_pictures(self):
-        print('saving')
         print('ending fps: ' + str(self.fps))
-        print(len(self.snips))
+        print('saving')
+
+        # BUG temp fix for the playback running fast, this seems to almost completely fix it, still need to find the root tho
+        adjusted_frame_timings = [(x * 1.05) for x in self.frame_timings] 
         self.snips[0].save(
             self.filename + '.gif',
             save_all=True,
             append_images=self.snips[1:],
             optimize=False,
-            duration=self.fps_ms,
+            duration=adjusted_frame_timings,
             loop=0
         )
+
         # idx = 0
         # for snip in self.snips:
         #     snip.save('snip_' + str(idx) + '.png')
@@ -135,7 +158,7 @@ class Snipper(QObject):
 
 
     def get_ms(self):
-        return time.time_ns() // 1000000
+        return time.time_ns() / 1000000
 
 
 class MainWindow(QMainWindow):
