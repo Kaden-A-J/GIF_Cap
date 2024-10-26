@@ -25,12 +25,13 @@ for /f "tokens=*" %%A in (temp.txt) do (
 :: If VS C++ 14 or higher not found, download it
 if !found_one! neq 1 (
     powershell -Command "Invoke-WebRequest https://aka.ms/vs/17/release/vs_BuildTools.exe -OutFile vs_BuildTools.exe"
-    start "" /w vs_BuildTools.exe --norestart --passive --downloadThenInstall --includeRecommended --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Workload.MSBuildTools
+    :: start "" /w vs_BuildTools.exe --norestart --passive --downloadThenInstall --includeRecommended --add Microsoft.VisualStudio.Workload.NativeDesktop --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Workload.MSBuildTools
     del "vs_BuildTools.exe"
+    echo WAIT until the installer is finished then press ENTER to continue.
+    pause
 )
 
-echo WAIT until the installer is finished then press ENTER to continue.
-pause
+
 
 :: Clean up
 del temp.txt

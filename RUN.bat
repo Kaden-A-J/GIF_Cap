@@ -1,18 +1,11 @@
 @echo off
 
-if not exist .venv (
-	py -m venv .venv
-	call .venv/Scripts/activate.bat
-
-	py -m pip install --upgrade pip
-	pip install Pillow
-	pip install PyQt6
-	pip install numpy
-)
-else (
-	call .venv/Scripts/activate.bat
+if not defined VIRTUAL_ENV (
+    call .venv/Scripts/activate.bat
 )
 
+call py scripts/persistent_icon.py
 
-py starter_script.py
-deactivate
+if defined VIRTUAL_ENV (
+    deactivate
+)

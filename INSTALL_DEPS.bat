@@ -1,17 +1,19 @@
 @echo off
 
+:: Make sure VS C++ 14.0 or higher is installed
 call vs_buildtools_installer.bat
 
+:: Make and activate virtual enviornment
 py -m venv .venv
-call .venv/Scripts/activate.bat
+call ../.venv/Scripts/activate.bat
 
 py -m pip install --upgrade pip
-pip install --upgrade setuptools
 
-pip install Pillow
-pip install PyQt6
-pip install numpy
+:: Pip install all the deps in deps.txt
+for /F "tokens=*" %%A in (scripts/deps.txt) do call pip install --force-reinstall %%A
 
 call RUN.bat
 
-deactivate
+if defined VIRTUAL_ENV (
+    deactivate
+)
