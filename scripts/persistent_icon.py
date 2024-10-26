@@ -37,7 +37,7 @@ def setup(icon):
 
 
 # Create the system tray icon
-icon = pystray.Icon('test', create_image(), 'GIF_Cap_Persistent', menu=pystray.Menu(
+icon = pystray.Icon('test', create_image(), 'GIF_Cap', menu=pystray.Menu(
     pystray.MenuItem(text="Open", action=on_activate, default=True),
     pystray.MenuItem(text='Quit', action=lambda icon: icon.stop())
 ))
